@@ -1,0 +1,548 @@
+---
+title: "Timberwolves Shooting Information from the 2016-17 to the 2024-25 Season"
+author: "Tommy Armstrong"
+date: "2025-11-04"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+#Functions
+
+
+#install.packages("ggforce")
+library(ggplot2)
+library(ggforce)
+library(dplyr)
+library(tidyverse)
+
+draw_court <- function(court_color = "black", court_lw = 1, outer_lines = TRUE) {
+  # Geometry constants (in inches)
+  baseline_y <- -47.5
+  corner_x <- 220
+  corner_length <- 140
+  arc_diameter <- 475
+  arc_radius <- arc_diameter / 2
+  theta1 <- 22 * pi / 180
+  theta2 <- 158 * pi / 180
+
+  # Create data for the three-point arc
+  arc_df <- data.frame(
+    x = arc_radius * cos(seq(theta1, theta2, length.out = 300)),
+    y = arc_radius * sin(seq(theta1, theta2, length.out = 300))
+  )
+
+  court <- list(
+    # Hoop
+    geom_path(
+      data = data.frame(x = 7.5 * cos(seq(0, 2 * pi, length.out = 100)),
+                        y = 7.5 * sin(seq(0, 2 * pi, length.out = 100))),
+      aes(x = x, y = y),
+      color = court_color, linewidth = court_lw
+    ),
+
+    # Backboard
+    geom_segment(
+      aes(x = -30, y = -7.5, xend = 30, yend = -7.5),
+      color = court_color, linewidth = court_lw
+    ),
+
+    # Outer paint box
+    geom_rect(
+      aes(xmin = -80, xmax = 80, ymin = -47.5, ymax = 142.5),
+      fill = NA, color = court_color, linewidth = court_lw
+    ),
+
+    # Inner paint box
+    geom_rect(
+      aes(xmin = -60, xmax = 60, ymin = -47.5, ymax = 142.5),
+      fill = NA, color = court_color, linewidth = court_lw
+    ),
+
+    # Free throw top arc
+    geom_path(
+      data = data.frame(
+        x = 60 * cos(seq(0, pi, length.out = 100)),
+        y = 142.5 + 60 * sin(seq(0, pi, length.out = 100))
+      ),
+      aes(x = x, y = y),
+      color = court_color, linewidth = court_lw
+    ),
+
+    # Free throw bottom (dashed)
+    geom_path(
+      data = data.frame(
+        x = 60 * cos(seq(pi, 2 * pi, length.out = 100)),
+        y = 142.5 + 60 * sin(seq(pi, 2 * pi, length.out = 100))
+      ),
+      aes(x = x, y = y),
+      color = court_color, linewidth = court_lw,
+      linetype = "dashed"
+    ),
+
+    # Restricted area
+    geom_path(
+      data = data.frame(
+        x = 40 * cos(seq(0, pi, length.out = 100)),
+        y = 40 * sin(seq(0, pi, length.out = 100))
+      ),
+      aes(x = x, y = y),
+      color = court_color, linewidth = court_lw
+    ),
+
+    # --- Three Point Line ---
+    # Left corner
+    annotate("segment",
+             x = -corner_x, xend = -corner_x,
+             y = baseline_y, yend = baseline_y + corner_length,
+             color = court_color, linewidth = court_lw),
+
+    # Right corner
+    annotate("segment",
+             x =  corner_x, xend =  corner_x,
+             y = baseline_y, yend = baseline_y + corner_length,
+             color = court_color, linewidth = court_lw),
+
+    # Arc
+    geom_path(
+      data = arc_df,
+      aes(x = x, y = y),
+      color = court_color, linewidth = court_lw
+    ),
+
+    # Half court arcs
+    geom_path(
+      data = data.frame(
+        x = 60 * cos(seq(pi, 2 * pi, length.out = 100)),
+        y = 422.5 + 60 * sin(seq(pi, 2 * pi, length.out = 100))
+      ),
+      aes(x = x, y = y),
+      color = court_color, linewidth = court_lw
+    ),
+
+    geom_path(
+      data = data.frame(
+        x = 20 * cos(seq(pi, 2 * pi, length.out = 100)),
+        y = 422.5 + 20 * sin(seq(pi, 2 * pi, length.out = 100))
+      ),
+      aes(x = x, y = y),
+      color = court_color, linewidth = court_lw
+    )
+  )
+
+  return(court)
+}
+
+#Made with AI
+#WHAT IT DOES: Draws the court outlines for a standard NBA court
+#INPUT: Takes in desired color, line width, and whether or not you want outer lines
+#OUTPUT: Outputs an accurate drawing of half an NBA court, code returns "court" which is a list that compiles the different circles and lines needed to form an NBA court
+```
+
+```{r, echo=FALSE}
+#Data cleaning
+
+
+# You can install using the pacman package using the following code:
+#if (!requireNamespace('pacman', quietly = TRUE)){
+#  install.packages('pacman')
+#}
+#pacman::p_load_current_gh("sportsdataverse/hoopR", dependencies = TRUE, update = TRUE)
+
+#pacman::p_load(dplyr, zoo, ggimage, gt)
+#install.packages("hoopR")
+
+library(hoopR)
+library(dplyr)
+library(tidyverse)
+
+
+#Gather data for each season; player_id = 0 means its for every player on the roster
+wolves_shots24_25 = nba_shotchartdetail(
+  team_id = 1610612750,
+  player_id = "0",
+  season = year_to_season(most_recent_nba_season() - 2),
+  season_type = "Regular Season",
+  context_measure = "FGA"
+)
+
+wolves_shots23_24 = nba_shotchartdetail(
+  team_id = 1610612750,
+  player_id = "0",
+  season = year_to_season(most_recent_nba_season() - 3),
+  season_type = "Regular Season",
+  context_measure = "FGA"
+)
+
+wolves_shots22_23 = nba_shotchartdetail(
+  team_id = 1610612750,
+  player_id = "0",
+  season = year_to_season(most_recent_nba_season() - 4),
+  season_type = "Regular Season",
+  context_measure = "FGA"
+)
+
+wolves_shots21_22 = nba_shotchartdetail(
+  team_id = 1610612750,
+  player_id = "0",
+  season = year_to_season(most_recent_nba_season() - 5),
+  season_type = "Regular Season",
+  context_measure = "FGA"
+)
+
+wolves_shots20_21 = nba_shotchartdetail(
+  team_id = 1610612750,
+  player_id = "0",
+  season = year_to_season(most_recent_nba_season() - 6),
+  season_type = "Regular Season",
+  context_measure = "FGA"
+)
+
+wolves_shots19_20 = nba_shotchartdetail(
+  team_id = 1610612750,
+  player_id = "0",
+  season = year_to_season(most_recent_nba_season() - 7),
+  season_type = "Regular Season",
+  context_measure = "FGA"
+)
+
+wolves_shots18_19 = nba_shotchartdetail(
+  team_id = 1610612750,
+  player_id = "0",
+  season = year_to_season(most_recent_nba_season() - 8),
+  season_type = "Regular Season",
+  context_measure = "FGA"
+)
+
+wolves_shots17_18 = nba_shotchartdetail(
+  team_id = 1610612750,
+  player_id = "0",
+  season = year_to_season(most_recent_nba_season() - 9),
+  season_type = "Regular Season",
+  context_measure = "FGA"
+)
+
+wolves_shots16_17 = nba_shotchartdetail(
+  team_id = 1610612750,
+  player_id = "0",
+  season = year_to_season(most_recent_nba_season() - 10),
+  season_type = "Regular Season",
+  context_measure = "FGA"
+)
+
+#This grabs just the data set with shot chart data, and adds a variable for the season
+wolvesdata24.25 = wolves_shots24_25$Shot_Chart_Detail |> mutate(season = "2024-25")
+wolvesdata23.24 = wolves_shots23_24$Shot_Chart_Detail |> mutate(season = "2023-24")
+wolvesdata22.23 = wolves_shots22_23$Shot_Chart_Detail |> mutate(season = "2022-23")
+wolvesdata21.22 = wolves_shots21_22$Shot_Chart_Detail |> mutate(season = "2021-22")
+wolvesdata20.21 = wolves_shots20_21$Shot_Chart_Detail |> mutate(season = "2020-21")
+wolvesdata19.20 = wolves_shots19_20$Shot_Chart_Detail |> mutate(season = "2019-20")
+wolvesdata18.19 = wolves_shots18_19$Shot_Chart_Detail |> mutate(season = "2018-19")
+wolvesdata17.18 = wolves_shots17_18$Shot_Chart_Detail |> mutate(season = "2017-18")
+wolvesdata16.17 = wolves_shots16_17$Shot_Chart_Detail |> mutate(season = "2016-17")
+
+#Combines all the seasons into one data set
+shotchartdata = bind_rows(wolvesdata24.25, 
+                          wolvesdata23.24, 
+                          wolvesdata22.23, 
+                          wolvesdata21.22, 
+                          wolvesdata20.21, 
+                          wolvesdata19.20, 
+                          wolvesdata18.19, 
+                          wolvesdata17.18, 
+                          wolvesdata16.17)
+
+#Grabbing only the desired variables 
+shotchartdata = shotchartdata |> 
+  mutate(
+    x_loc = as.numeric(LOC_X),
+    y_loc = as.numeric(LOC_Y),
+    attempt = as.factor(SHOT_ATTEMPTED_FLAG),
+    shotmake = as.factor(SHOT_MADE_FLAG),
+    date = as.Date(GAME_DATE, format = "%Y%m%d")) |>
+  select(PLAYER_NAME, SHOT_ZONE_BASIC, season, x_loc, y_loc, attempt, shotmake, date)
+```
+
+```{r, echo = FALSE}
+#Making graphs
+
+shotchart24.25 = shotchartdata |> 
+  filter(season == "2024-25" & y_loc <= 422.5) |> #y_loc to this # removes half court shots
+  ggplot(aes(x = x_loc, y = y_loc)) +
+  geom_point(aes(color = shotmake, shape = shotmake), alpha = .35) +
+  scale_color_manual(values = c("0" = "#236192", "1" = "#78be20")) +
+  scale_shape_manual(values = c("0" = 4, "1" = 16)) +
+  labs(color = "Shot Make", shape = "Shot Make") +
+  coord_fixed() +  # keeps aspect ratio so court isn't stretched
+  theme_minimal() + 
+  labs(title = "Minnesota Timberwolves Shot Chart 2024-25 Season") +
+  draw_court() +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+
+shotchart23.24 = shotchartdata |> 
+  filter(season == "2023-24" & y_loc <= 422.5) |> 
+  ggplot(aes(x = x_loc, y = y_loc)) +
+  geom_point(aes(color = shotmake, shape = shotmake), alpha = .35) +
+  scale_color_manual(values = c("0" = "#236192", "1" = "#78be20")) +
+  scale_shape_manual(values = c("0" = 4, "1" = 16)) +
+  labs(color = "Shot Make", shape = "Shot Make") +
+  coord_fixed() +  # keeps aspect ratio so court isn't stretched
+  theme_minimal() + 
+  labs(title = "Minnesota Timberwolves Shot Chart 2023-24 Season") +
+  draw_court() +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+
+shotchart22.23 = shotchartdata |> 
+  filter(season == "2022-23" & y_loc <= 422.5) |> 
+  ggplot(aes(x = x_loc, y = y_loc)) +
+  geom_point(aes(color = shotmake, shape = shotmake), alpha = .35) +
+  scale_color_manual(values = c("0" = "#236192", "1" = "#78be20")) +
+  scale_shape_manual(values = c("0" = 4, "1" = 16)) +
+  labs(color = "Shot Make", shape = "Shot Make") +
+  coord_fixed() +  # keeps aspect ratio so court isn't stretched
+  theme_minimal() + 
+  labs(title = "Minnesota Timberwolves Shot Chart 2022-23 Season") +
+  draw_court() +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+
+shotchart21.22 = shotchartdata |> 
+  filter(season == "2021-22" & y_loc <= 422.5) |> 
+  ggplot(aes(x = x_loc, y = y_loc)) +
+  geom_point(aes(color = shotmake, shape = shotmake), alpha = .35) +
+  scale_color_manual(values = c("0" = "#236192", "1" = "#78be20")) +
+  scale_shape_manual(values = c("0" = 4, "1" = 16)) +
+  labs(color = "Shot Make", shape = "Shot Make") +
+  coord_fixed() +  # keeps aspect ratio so court isn't stretched
+  theme_minimal() + 
+  labs(title = "Minnesota Timberwolves Shot Chart 2021-22 Season") +
+  draw_court() +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+
+shotchart20.21 = shotchartdata |> 
+  filter(season == "2020-21" & y_loc <= 422.5) |> 
+  ggplot(aes(x = x_loc, y = y_loc)) +
+  geom_point(aes(color = shotmake, shape = shotmake), alpha = .35) +
+  scale_color_manual(values = c("0" = "#236192", "1" = "#78be20")) +
+  scale_shape_manual(values = c("0" = 4, "1" = 16)) +
+  labs(color = "Shot Make", shape = "Shot Make") +
+  coord_fixed() +  # keeps aspect ratio so court isn't stretched
+  theme_minimal() + 
+  labs(title = "Minnesota Timberwolves Shot Chart 2020-21 Season") +
+  draw_court() +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+
+shotchart19.20 = shotchartdata |> 
+  filter(season == "2019-20" & y_loc <= 422.5) |> 
+  ggplot(aes(x = x_loc, y = y_loc)) +
+  geom_point(aes(color = shotmake, shape = shotmake), alpha = .35) +
+  scale_color_manual(values = c("0" = "#236192", "1" = "#78be20")) +
+  scale_shape_manual(values = c("0" = 4, "1" = 16)) +
+  labs(color = "Shot Make", shape = "Shot Make") +
+  coord_fixed() +  # keeps aspect ratio so court isn't stretched
+  theme_minimal() + 
+  labs(title = "Minnesota Timberwolves Shot Chart 2019-20 Season") +
+  draw_court() +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+
+shotchart18.19 = shotchartdata |> 
+  filter(season == "2018-19" & y_loc <= 422.5) |> 
+  ggplot(aes(x = x_loc, y = y_loc)) +
+  geom_point(aes(color = shotmake, shape = shotmake), alpha = .35) +
+  scale_color_manual(values = c("0" = "#236192", "1" = "#78be20")) +
+  scale_shape_manual(values = c("0" = 4, "1" = 16)) +
+  labs(color = "Shot Make", shape = "Shot Make") +
+  coord_fixed() +  # keeps aspect ratio so court isn't stretched
+  theme_minimal() + 
+  labs(title = "Minnesota Timberwolves Shot Chart 2018-19 Season") +
+  draw_court() +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+
+shotchart17.18 = shotchartdata |> 
+  filter(season == "2017-18" & y_loc <= 422.5) |> 
+  ggplot(aes(x = x_loc, y = y_loc)) +
+  geom_point(aes(color = shotmake, shape = shotmake), alpha = .35) +
+  scale_color_manual(values = c("0" = "#236192", "1" = "#78be20")) +
+  scale_shape_manual(values = c("0" = 4, "1" = 16)) +
+  labs(color = "Shot Make", shape = "Shot Make") +
+  coord_fixed() +  # keeps aspect ratio so court isn't stretched
+  theme_minimal() + 
+  labs(title = "Minnesota Timberwolves Shot Chart 2017-18 Season") +
+  draw_court() +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+
+shotchart16.17 = shotchartdata |> 
+  filter(season == "2016-17" & y_loc <= 422.5) |> 
+  ggplot(aes(x = x_loc, y = y_loc)) +
+  geom_point(aes(color = shotmake, shape = shotmake), alpha = .35) +
+  scale_color_manual(values = c("0" = "#236192", "1" = "#78be20")) +
+  scale_shape_manual(values = c("0" = 4, "1" = 16)) +
+  labs(color = "Shot Make", shape = "Shot Make") +
+  coord_fixed() +  # keeps aspect ratio so court isn't stretched
+  theme_minimal() + 
+  labs(title = "Minnesota Timberwolves Shot Chart 2016-17 Season") +
+  draw_court() +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+```
+
+```{r, echo=FALSE, warning = FALSE}
+shotchart24.25; shotchart23.24; shotchart22.23; shotchart21.22; shotchart20.21; shotchart19.20; shotchart18.19; shotchart17.18; shotchart16.17
+```
+
+### Main Findings:
+
+-   The Timberwolves are moving away from mid-range shots
+
+-   Currently, the coaching emphasis is to prioritize three-point shots in addition to shots inside the restricted area.
+
+-   The change in coaching over the last nine seasons has led to a different format of offensive
+
+-   More emphasis for corner and wing three-point attempts
+
+-   Higher percentage of shots taken are three-pointers
+
+### Further Explanation
+
+Over the last several seasons in the National Basketball Association (NBA), teams have been shifting away from the mid-range shot. The Minnesota Timberwolves is no exception. Shot charts spanning from the 2016-17 season to the 2024-25 season for the wolves show a decline in mid-range attempts. Mid-ranges are seen as a “low percentage” shot; they are worth the same amount as a layup, a much easier shot, and don’t have the upside that the three-point shot offers. Comparing the 16-17 season to the 24-25 season shows the dramatic shift in offensive scheming. The 2016-17 season has a balanced shot chart with the whole half court decently filled with attempts. Alternatively, the 2024-25 season shows hardly any shots in the mid-range region. Overall, as time has progressed, the Timberwolves are moving away from the mid-range shot in favor of more statistically desired looks.
+
+The death of the mid-range is a result of NBA teams such as the Timberwolves shifting priorities on offense to emphasize threes or shots inside the paint. These “high percentage” shots are seen to have more value. Layups inside the paint are widely considered the easiest shot in basketball, and three-pointers offer a 1.5x point multiplier on a make. This results in recent season shot charts having denser areas in the paint and behind the three-point line. NBA basketball is following a path similar to baseball with scheming based on statistics. The stats say that the three-pointer and paint shots have the most upside for offenses, ultimately shifting offenses, like the Timberwolves, to reflect this belief. 
+
+Another shift in shot attempts can be a reflection of coaching changes. The Timberwolves over the last nine seasons have had three coaching changes. 2016 to 2019 Minnesota was under Tom Thibodeau. After he got fired in the middle of the 2019 season, Ryan Saunders took over until his departure during the 2021 season. From that point to current day, the Timberwolves are under the lead of current coach, Chris Finch. Each coach enters with their own philosophy and approach to the game. Thibodeau, unlike the other two coaches, encouraged players to shoot in the mid-range. Additionally, more shots from the baseline were seen with Thibodeau at the helm. Saunders and Finch both prioritize threes and paint shots, but they differ slightly in locations. The Saunders era saw little emphasis to get looks from the corners, leading to a larger amount of threes being from the top of the key. Today, Finch and the Timberwolves look for a balance of threes all over the court. Overall, coaches come with schemes and beliefs which they instill into their team. No two approaches are the same for coaches, leading to variability in shot charts over the last nine seasons. 
+
+As stated earlier, a change over time seen was where three-pointers were taken. Volume increased as years passed and so did the spread of attempts. Earlier shot charts show limited attempts from the corner and wing. As time passed, more looks from these spots were encouraged. Comparing the three coaching eras show a little shift from no wing but corner looks, to neither, to both. The added emphasis of threes in the modern NBA has led to teams creating schemes to balance the attack from behind the arc. 
+
+Finally, one of the most visible shifts seen is the added emphasis of threes for the Timberwolves. Over the nine seasons charted, more percentage of looks have started coming from the three-point area. The increase of shooting skill among players and the value of the three has led to the Timberwolves prioritizing this shot offensively now more than ever.
+
+### Additional Information:
+
+```{r, echo=FALSE, warning = FALSE}
+#Making hot/ cold zone chart
+
+#Grabs NBA shot chart information
+leagueinfo = nba_shotchartleaguewide(
+  league_id = "00",
+  season = "2024-25")
+
+#Make it so its only the data set
+leagueinfo = leagueinfo$League_Wide
+
+#Grabs desired variables
+leagueinfo = leagueinfo |> 
+  select(SHOT_ZONE_BASIC, FG_PCT)
+
+#Adds the season as a variable
+pt4data = shotchartdata |> filter(season == "2024-25")
+
+#Joins the league average info to the Timberwolves shot chart information by the shot zone
+pt4data = left_join(pt4data, leagueinfo, by = "SHOT_ZONE_BASIC")
+
+#Makes a variable for the wolves average shot percentage per zone
+pt4data = pt4data |>
+  rename(league.avg = FG_PCT, zone = SHOT_ZONE_BASIC) |>
+  group_by(zone) |> 
+  mutate(
+    wolves.avg = sum(as.numeric(as.character(shotmake)), na.rm = TRUE) / n())
+
+#Defines court size 
+x_range = 500 #One corner of baseline to other 
+y_range = 425 #Takes out half court and beyond looks
+bins = 19 #Modifiable
+
+hotcold24.25 = pt4data |> 
+  filter(y_loc <= 350) |> #Helps with graph looking more ascetically pleasing 
+  ggplot(aes(x = x_loc, y = y_loc)) +
+  stat_summary_2d(
+    aes(z = wolves.avg - as.numeric(league.avg)), #var. for the difference in percent by zone
+    binwidth = c(x_range / bins, y_range / bins),    
+    fun = mean
+  ) +
+  scale_fill_gradient2(
+    low = "blue",
+    mid = "grey",
+    high = "red",
+    midpoint = 0,
+    limits = c(-.2, .2)
+  ) +
+  coord_fixed() +
+  draw_court() +
+  theme_minimal() +
+  labs(
+    title = "Minnesota Timberwolves 2024-25 Hot/Cold Regions",
+    fill = "Percent Difference from League Avg"
+  ) +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank()
+  )
+
+hotcold24.25
+```
+
+This graph shows the hot and cold regions for the Timberwolves over the course of the 2024-25 season. It compares the shooting percentage of the six major zones (L/R corner 3, above the break 3, mid-range, paint, and restricted area) to league average for that season. The red areas are where Minnesota shot above league average, the blue is where they shot below, and the grey is right at league average. The blank areas means there was no shots defined within that designated area on the court.
+
+The different information used was from the league wide shot chart command from the HoopR package. I took the league wide shooting percentage averages for the 2024-25 season and the shot zone to combine it with my Timberwolves shot chart data.
